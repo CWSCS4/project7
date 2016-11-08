@@ -5,6 +5,8 @@ if (process.argv.length !== 3) throw new Error('Incorrect syntax. Use: ./compile
 
 class EqInstruction {
 	toString() {
+		const eqLabel = 'EQ_' + String(instructions.length)
+		const endLabel = 'END_' + eqLabel
 		return [
 			'@SP',
 			'M=M-1',
@@ -13,9 +15,32 @@ class EqInstruction {
 			'@SP',
 			'M=M-1',
 			'A=M',
-			'D=D-M'
-			//jump depending on whether this is 0
+			'D=D-M',
+			'@' + eqLabel,
+			'D;JEQ',
+			'D=0',
+			'@' + endLabel,
+			'0;JMP',
+			'(' + eqLabel + ')',
+			'D=1',
+			'(' + endLabel + ')',
+			'@SP',
+			'M=M+1',
+			'A=M-1',
+			'M=D'
 		]
+	}
+}
+function getR15Instructions(positionArguments) {
+	switch (positionArguments[0]) {
+		default: {
+			throw new Error('Unknown segment: "' + positionArguments[0] + '"')
+		}
+	}
+}
+class PushInstruction {
+	constructor(positionArguments) {
+		this.r15Instructions = getR15Instructions(positionArguments)
 	}
 }
 
@@ -56,14 +81,20 @@ const INITIALIZE_INSTRUCTIONS = [
 	'M=D'
 ]
 const instructions = []
-const WHITESPACE = /^\s*$/
+const EMPTY = /^\s*(?:\/\/.*)?$/
 getLines(inStream, line => {
-	if (WHITESPACE.test(line)) return
+	line = line.trim()
+	if (EMPTY.test(line)) return
 	const commandArguments = line.split(' ')
 	let instruction
 	switch (commandArguments[0]) {
 		case 'eq': {
 			instruction = new EqInstruction
+			break
+		}
+		case 'push': {
+			const [_, ...positionArguments] = commandArguments
+			instruction = new PushInstruction(positionArguments)
 			break
 		}
 		default: {

@@ -103,17 +103,142 @@ class OrInstruction {
 			.concat(PUSH_FROM_D)
 	}
 }
+function getVariableSegmentStartIntoD(segment) {
+	let segmentStartPointer
+	switch (segment) {
+		case 'argument': {
+			segmentStartPointer = '@ARG'
+			break
+		}
+		case 'local': {
+			segmentStartPointer = '@LCL'
+			break
+		}
+		case 'this': {
+			segmentStartPointer = '@THIS'
+			break
+		}
+		case 'that': {
+			segmentStartPointer = '@THAT'
+			break
+		}
+		default: {
+			throw new Error('Segment "' + segment + '" is not a variable segment')
+		}
+	}
+	return [
+		segmentStartPointer,
+		'D=M'
+	]
+}
+function getFixedSegmentStart(segment) {
+	switch (segment) {
+		case 'static': {
+			return 16
+			break
+		}
+		case 'temp': {
+			return 5
+			break
+		}
+		default: {
+			throw new Error('Segment "' + segment + '" is not a fixed segment')
+		}
+	}
+}
+function getPositionIntoD(positionArguments) {
+	const [segment, offset] = positionArguments
+	switch (segment) {
+		case 'argument':
+		case 'local':
+		case 'this':
+		case 'that': {
+			return getVariableSegmentStartIntoD(segment)
+				.concat([
+					'@' + offset,
+					'D=D+A'
+				])
+		}
+		case 'static':
+		case 'temp': {
+			return [
+				'@' + String(getFixedSegmentStart(segment) + Number(offset)),
+				'D=A'
+			]
+		}
+		case 'pointer': {
+			let position
+			switch (offset) {
+				case '0': {
+					position = '@THIS'
+					break
+				}
+				case '1': {
+					position = '@THAT'
+					break
+				}
+				default: {
+					throw new Error('Unknown pointer offset: ' + offset)
+				}
+			}
+			return [
+				position,
+				'D=A'
+			]
+		}
+		default: {
+			throw new Error('Unknown segment: "' + segment + '"')
+		}
+	}
+}
+class PopInstruction {
+	constructor(positionArguments) {
+		this.instructions = POP_INTO_D
+			.concat([
+				'@R14',
+				'M=D'
+			])
+			.concat(getPositionIntoD(positionArguments))
+			.concat([
+				'@R15',
+				'M=D',
+				'@R14',
+				'D=M',
+				'@R15',
+				'A=M',
+				'M=D'
+			])
+	}
+	toHack() {
+		return this.instructions
+	}
+}
 function getValueIntoD(positionArguments) {
-	switch (positionArguments[0]) {
+	const [segment, offset] = positionArguments
+	switch (segment) {
 		case 'constant': {
 			return [
-				'@' + positionArguments[1],
+				'@' + offset,
 				'D=A'
 			]
 			break
 		}
+		case 'argument':
+		case 'local':
+		case 'static':
+		case 'this':
+		case 'that':
+		case 'pointer':
+		case 'temp': {
+			const positionIntoD = getPositionIntoD(positionArguments)
+			const lastInstruction = positionIntoD[positionIntoD.length - 1]
+			if (lastInstruction === 'D=A') positionIntoD.pop()
+			else positionIntoD[positionIntoD.length - 1] = lastInstruction.replace('D=', 'A=')
+			positionIntoD.push('D=M')
+			return positionIntoD
+		}
 		default: {
-			throw new Error('Unknown segment: "' + positionArguments[0] + '"')
+			throw new Error('Unknown segment: "' + segment + '"')
 		}
 	}
 }
@@ -205,6 +330,11 @@ getLines(inStream, line => {
 		}
 		case 'or': {
 			instruction = new OrInstruction
+			break
+		}
+		case 'pop': {
+			const [_, ...positionArguments] = commandArguments
+			instruction = new PopInstruction(positionArguments)
 			break
 		}
 		case 'push': {

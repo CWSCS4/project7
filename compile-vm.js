@@ -5,12 +5,10 @@ if (process.argv.length !== 3) throw new Error('Incorrect syntax. Use: ./compile
 
 const DECREMENT_AND_LOAD_SP = [
 	'@SP',
-	'M=M-1',
-	'A=M'
+	'AM=M-1'
 ]
-const POP_INTO_D = DECREMENT_AND_LOAD_SP.concat([
-	'D=M'
-])
+const POP_INTO_D = DECREMENT_AND_LOAD_SP
+	.concat(['D=M'])
 const PUSH_FROM_D = [
 	'@SP',
 	'A=M',
@@ -22,9 +20,7 @@ class AddInstruction {
 	toHack() {
 		return POP_INTO_D
 			.concat(DECREMENT_AND_LOAD_SP)
-			.concat([
-				'D=M+D'
-			])
+			.concat(['D=M+D'])
 			.concat(PUSH_FROM_D)
 	}
 }
@@ -32,33 +28,32 @@ class AndInstruction {
 	toHack() {
 		return POP_INTO_D
 			.concat(DECREMENT_AND_LOAD_SP)
-			.concat([
-				'D=M&D'
-			])
+			.concat(['D=M&D'])
 			.concat(PUSH_FROM_D)
 	}
 }
+let comparisonLabelID = 0
 function comparisonInstructions(jmpTrue) {
-	const jmpTrueLabel = jmpTrue + '_' + String(instructions.length) //guarantee no collisions
+	const jmpTrueLabel = jmpTrue + '_' + String(comparisonLabelID++) //guarantee no collisions
 	const endLabel = 'END_' + jmpTrueLabel
-	return POP_INTO_D.concat([
-		'@SP',
-		'M=M-1',
-		'A=M',
-		'D=M-D',
-		'@' + jmpTrueLabel,
-		'D;J' + jmpTrue,
-		'D=0',
-		'@' + endLabel,
-		'0;JMP',
-		'(' + jmpTrueLabel + ')',
-		'D=-1',
-		'(' + endLabel + ')',
-		'@SP',
-		'M=M+1',
-		'A=M-1',
-		'M=D'
-	])
+	return POP_INTO_D
+		.concat([
+			'@SP',
+			'AM=M-1',
+			'D=M-D',
+			'@' + jmpTrueLabel,
+			'D;J' + jmpTrue,
+			'D=0',
+			'@' + endLabel,
+			'0;JMP',
+			'(' + jmpTrueLabel + ')',
+			'D=-1',
+			'(' + endLabel + ')',
+			'@SP',
+			'M=M+1',
+			'A=M-1',
+			'M=D'
+		])
 }
 class GtInstruction {
 	toHack() {
@@ -78,18 +73,14 @@ class LtInstruction {
 class NegInstruction {
 	toHack() {
 		return DECREMENT_AND_LOAD_SP
-			.concat([
-				'D=-M'
-			])
+			.concat(['D=-M'])
 			.concat(PUSH_FROM_D)
 	}
 }
 class NotInstruction {
 	toHack() {
 		return DECREMENT_AND_LOAD_SP
-			.concat([
-				'D=!M'
-			])
+			.concat(['D=!M'])
 			.concat(PUSH_FROM_D)
 	}
 }
@@ -97,9 +88,7 @@ class OrInstruction {
 	toHack() {
 		return POP_INTO_D
 			.concat(DECREMENT_AND_LOAD_SP)
-			.concat([
-				'D=M|D'
-			])
+			.concat(['D=M|D'])
 			.concat(PUSH_FROM_D)
 	}
 }
@@ -230,12 +219,12 @@ function getValueIntoD(positionArguments) {
 		case 'that':
 		case 'pointer':
 		case 'temp': {
-			const positionIntoD = getPositionIntoD(positionArguments)
-			const lastInstruction = positionIntoD[positionIntoD.length - 1]
-			if (lastInstruction === 'D=A') positionIntoD.pop()
-			else positionIntoD[positionIntoD.length - 1] = lastInstruction.replace('D=', 'A=')
-			positionIntoD.push('D=M')
-			return positionIntoD
+			const intoDInstructions = getPositionIntoD(positionArguments)
+			const lastInstruction = intoDInstructions[intoDInstructions.length - 1]
+			if (lastInstruction === 'D=A') intoDInstructions.pop()
+			else intoDInstructions[intoDInstructions.length - 1] = lastInstruction.replace('D=', 'A=')
+			intoDInstructions.push('D=M')
+			return intoDInstructions
 		}
 		default: {
 			throw new Error('Unknown segment: "' + segment + '"')
@@ -255,9 +244,7 @@ class SubInstruction {
 	toHack() {
 		return POP_INTO_D
 			.concat(DECREMENT_AND_LOAD_SP)
-			.concat([
-				'D=M-D'
-			])
+			.concat(['D=M-D'])
 			.concat(PUSH_FROM_D)
 	}
 }
@@ -292,11 +279,11 @@ const inStream = fs.createReadStream(rootFile + VM)
 inStream.on('error', err => {
 	throw new Error('Could not find file: ' + rootFile + VM)
 })
-const instructions = []
-const EMPTY = /^\s*(?:\/\/.*)?$/
+const outStream = fs.createWriteStream(rootFile + ASM)
+const EMPTY_LINE = /^\s*(?:\/\/.*)?$/
 getLines(inStream, line => {
 	line = line.trim()
-	if (EMPTY.test(line)) return
+	if (EMPTY_LINE.test(line)) return
 	const commandArguments = line.split(' ')
 	let instruction
 	switch (commandArguments[0]) {
@@ -350,12 +337,10 @@ getLines(inStream, line => {
 			throw new Error('Unrecognized command in "' + line + '"')
 		}
 	}
-	instructions.push(...instruction.toHack())
-}, () => {
-	const outStream = fs.createWriteStream(rootFile + ASM)
-	for (const instruction of instructions) {
-		outStream.write(instruction)
+	for (const line of instruction.toHack()) {
+		outStream.write(line)
 		outStream.write('\n')
 	}
+}, () => {
 	outStream.end()
 })

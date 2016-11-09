@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 const fs = require('fs')
+const path = require('path')
 
 if (process.argv.length !== 3) throw new Error('Incorrect syntax. Use: ./compile-vm.js FILE[.asm]')
 
@@ -11,25 +12,26 @@ const POP_INTO_D = DECREMENT_AND_LOAD_SP
 	.concat(['D=M'])
 const PUSH_FROM_D = [
 	'@SP',
-	'A=M',
-	'M=D',
-	'@SP',
-	'M=M+1'
+	'M=M+1',
+	'A=M-1',
+	'M=D'
 ]
+const ADD_INSTRUCTION = POP_INTO_D
+	.concat(DECREMENT_AND_LOAD_SP)
+	.concat(['D=M+D'])
+	.concat(PUSH_FROM_D)
 class AddInstruction {
 	toHack() {
-		return POP_INTO_D
-			.concat(DECREMENT_AND_LOAD_SP)
-			.concat(['D=M+D'])
-			.concat(PUSH_FROM_D)
+		return ADD_INSTRUCTION
 	}
 }
+const AND_INSTRUCTION = POP_INTO_D
+	.concat(DECREMENT_AND_LOAD_SP)
+	.concat(['D=M&D'])
+	.concat(PUSH_FROM_D)
 class AndInstruction {
 	toHack() {
-		return POP_INTO_D
-			.concat(DECREMENT_AND_LOAD_SP)
-			.concat(['D=M&D'])
-			.concat(PUSH_FROM_D)
+		return AND_INSTRUCTION
 	}
 }
 let comparisonLabelID = 0
@@ -48,12 +50,9 @@ function comparisonInstructions(jmpTrue) {
 			'0;JMP',
 			'(' + jmpTrueLabel + ')',
 			'D=-1',
-			'(' + endLabel + ')',
-			'@SP',
-			'M=M+1',
-			'A=M-1',
-			'M=D'
+			'(' + endLabel + ')'
 		])
+		.concat(PUSH_FROM_D)
 }
 class GtInstruction {
 	toHack() {
@@ -70,26 +69,29 @@ class LtInstruction {
 		return comparisonInstructions('LT')
 	}
 }
+const NEG_INSTRUCTION = DECREMENT_AND_LOAD_SP
+	.concat(['D=-M'])
+	.concat(PUSH_FROM_D)
 class NegInstruction {
 	toHack() {
-		return DECREMENT_AND_LOAD_SP
-			.concat(['D=-M'])
-			.concat(PUSH_FROM_D)
+		return NEG_INSTRUCTION
 	}
 }
+const NOT_INSTRUCTION = DECREMENT_AND_LOAD_SP
+	.concat(['D=!M'])
+	.concat(PUSH_FROM_D)
 class NotInstruction {
 	toHack() {
-		return DECREMENT_AND_LOAD_SP
-			.concat(['D=!M'])
-			.concat(PUSH_FROM_D)
+		return NOT_INSTRUCTION
 	}
 }
+const OR_INSTRUCTION = POP_INTO_D
+	.concat(DECREMENT_AND_LOAD_SP)
+	.concat(['D=M|D'])
+	.concat(PUSH_FROM_D)
 class OrInstruction {
 	toHack() {
-		return POP_INTO_D
-			.concat(DECREMENT_AND_LOAD_SP)
-			.concat(['D=M|D'])
-			.concat(PUSH_FROM_D)
+		return OR_INSTRUCTION
 	}
 }
 function getVariableSegmentStartIntoD(segment) {
@@ -120,22 +122,8 @@ function getVariableSegmentStartIntoD(segment) {
 		'D=M'
 	]
 }
-function getFixedSegmentStart(segment) {
-	switch (segment) {
-		case 'static': {
-			return 16
-			break
-		}
-		case 'temp': {
-			return 5
-			break
-		}
-		default: {
-			throw new Error('Segment "' + segment + '" is not a fixed segment')
-		}
-	}
-}
-function getPositionIntoD(positionArguments) {
+const TEMP_SEGMENT_OFFSET = 5
+function getPositionIntoD({positionArguments, className}) {
 	const [segment, offset] = positionArguments
 	switch (segment) {
 		case 'argument':
@@ -148,10 +136,15 @@ function getPositionIntoD(positionArguments) {
 					'D=D+A'
 				])
 		}
-		case 'static':
+		case 'static': {
+			return [
+				'@' + className + '.' + offset,
+				'D=A'
+			]
+		}
 		case 'temp': {
 			return [
-				'@' + String(getFixedSegmentStart(segment) + Number(offset)),
+				'@' + String(TEMP_SEGMENT_OFFSET + Number(offset)),
 				'D=A'
 			]
 		}
@@ -181,18 +174,15 @@ function getPositionIntoD(positionArguments) {
 	}
 }
 class PopInstruction {
-	constructor(positionArguments) {
-		this.instructions = POP_INTO_D
-			.concat([
-				'@R14',
-				'M=D'
-			])
-			.concat(getPositionIntoD(positionArguments))
+	constructor({positionArguments, className}) {
+		this.instructions = getPositionIntoD({positionArguments, className})
 			.concat([
 				'@R15',
-				'M=D',
-				'@R14',
-				'D=M',
+				'M=D'
+				
+			])
+			.concat(POP_INTO_D)
+			.concat([
 				'@R15',
 				'A=M',
 				'M=D'
@@ -202,7 +192,7 @@ class PopInstruction {
 		return this.instructions
 	}
 }
-function getValueIntoD(positionArguments) {
+function getValueIntoD({positionArguments, className}) {
 	const [segment, offset] = positionArguments
 	switch (segment) {
 		case 'constant': {
@@ -219,7 +209,7 @@ function getValueIntoD(positionArguments) {
 		case 'that':
 		case 'pointer':
 		case 'temp': {
-			const intoDInstructions = getPositionIntoD(positionArguments)
+			const intoDInstructions = getPositionIntoD({positionArguments, className})
 			const lastInstruction = intoDInstructions[intoDInstructions.length - 1]
 			if (lastInstruction === 'D=A') intoDInstructions.pop()
 			else intoDInstructions[intoDInstructions.length - 1] = lastInstruction.replace('D=', 'A=')
@@ -232,20 +222,21 @@ function getValueIntoD(positionArguments) {
 	}
 }
 class PushInstruction {
-	constructor(positionArguments) {
-		this.instructions = getValueIntoD(positionArguments)
+	constructor({positionArguments, className}) {
+		this.instructions = getValueIntoD({positionArguments, className})
 			.concat(PUSH_FROM_D)
 	}
 	toHack() {
 		return this.instructions
 	}
 }
+const SUB_INSTRUCTION = POP_INTO_D
+	.concat(DECREMENT_AND_LOAD_SP)
+	.concat(['D=M-D'])
+	.concat(PUSH_FROM_D)
 class SubInstruction {
 	toHack() {
-		return POP_INTO_D
-			.concat(DECREMENT_AND_LOAD_SP)
-			.concat(['D=M-D'])
-			.concat(PUSH_FROM_D)
+		return SUB_INSTRUCTION
 	}
 }
 
@@ -272,21 +263,22 @@ function getLines(stream, lineCallback, endCallback) {
 const VM = '.vm'
 const ASM = '.asm'
 const file = process.argv[2]
-let rootFile
-if (file.endsWith(VM)) rootFile = file.substring(0, file.length - VM.length)
-else rootFile = file
-const inStream = fs.createReadStream(rootFile + VM)
+const rootFile = file.substring(0, file.length - VM.length)
+const inStream = fs.createReadStream(file)
 inStream.on('error', err => {
-	throw new Error('Could not find file: ' + rootFile + VM)
+	throw new Error('Could not find file: ' + file)
 })
+const fullFile = path.resolve(rootFile)
+const className = fullFile.substring(fullFile.lastIndexOf(path.sep) + 1)
 const outStream = fs.createWriteStream(rootFile + ASM)
 const EMPTY_LINE = /^\s*(?:\/\/.*)?$/
 getLines(inStream, line => {
 	line = line.trim()
 	if (EMPTY_LINE.test(line)) return
 	const commandArguments = line.split(' ')
+	const [command, ...positionArguments] = commandArguments
 	let instruction
-	switch (commandArguments[0]) {
+	switch (command) {
 		case 'add': {
 			instruction = new AddInstruction
 			break
@@ -320,13 +312,11 @@ getLines(inStream, line => {
 			break
 		}
 		case 'pop': {
-			const [_, ...positionArguments] = commandArguments
-			instruction = new PopInstruction(positionArguments)
+			instruction = new PopInstruction({positionArguments, className})
 			break
 		}
 		case 'push': {
-			const [_, ...positionArguments] = commandArguments
-			instruction = new PushInstruction(positionArguments)
+			instruction = new PushInstruction({positionArguments, className})
 			break
 		}
 		case 'sub': {
@@ -341,6 +331,4 @@ getLines(inStream, line => {
 		outStream.write(line)
 		outStream.write('\n')
 	}
-}, () => {
-	outStream.end()
-})
+}, () => outStream.end())

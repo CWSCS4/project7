@@ -179,7 +179,6 @@ class PopInstruction {
 			.concat([
 				'@R15',
 				'M=D'
-				
 			])
 			.concat(POP_INTO_D)
 			.concat([

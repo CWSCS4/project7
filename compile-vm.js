@@ -16,33 +16,15 @@ const PUSH_FROM_D = [
 	'A=M-1',
 	'M=D'
 ]
-const ADD_INSTRUCTION = POP_INTO_D
+const SUB_INTO_D = POP_INTO_D
 	.concat(DECREMENT_AND_LOAD_SP)
-	.concat(['D=M+D'])
-	.concat(PUSH_FROM_D)
-class AddInstruction {
-	toHack() {
-		return ADD_INSTRUCTION
-	}
-}
-const AND_INSTRUCTION = POP_INTO_D
-	.concat(DECREMENT_AND_LOAD_SP)
-	.concat(['D=M&D'])
-	.concat(PUSH_FROM_D)
-class AndInstruction {
-	toHack() {
-		return AND_INSTRUCTION
-	}
-}
+	.concat(['D=M-D'])
 let comparisonLabelID = 0
 function comparisonInstructions(jmpTrue) {
 	const jmpTrueLabel = jmpTrue + '_' + String(comparisonLabelID++) //guarantee no collisions
 	const endLabel = 'END_' + jmpTrueLabel
-	return POP_INTO_D
+	return SUB_INTO_D
 		.concat([
-			'@SP',
-			'AM=M-1',
-			'D=M-D',
 			'@' + jmpTrueLabel,
 			'D;J' + jmpTrue,
 			'D=0',
@@ -53,46 +35,6 @@ function comparisonInstructions(jmpTrue) {
 			'(' + endLabel + ')'
 		])
 		.concat(PUSH_FROM_D)
-}
-class GtInstruction {
-	toHack() {
-		return comparisonInstructions('GT')
-	}
-}
-class EqInstruction {
-	toHack() {
-		return comparisonInstructions('EQ')
-	}
-}
-class LtInstruction {
-	toHack() {
-		return comparisonInstructions('LT')
-	}
-}
-const NEG_INSTRUCTION = DECREMENT_AND_LOAD_SP
-	.concat(['D=-M'])
-	.concat(PUSH_FROM_D)
-class NegInstruction {
-	toHack() {
-		return NEG_INSTRUCTION
-	}
-}
-const NOT_INSTRUCTION = DECREMENT_AND_LOAD_SP
-	.concat(['D=!M'])
-	.concat(PUSH_FROM_D)
-class NotInstruction {
-	toHack() {
-		return NOT_INSTRUCTION
-	}
-}
-const OR_INSTRUCTION = POP_INTO_D
-	.concat(DECREMENT_AND_LOAD_SP)
-	.concat(['D=M|D'])
-	.concat(PUSH_FROM_D)
-class OrInstruction {
-	toHack() {
-		return OR_INSTRUCTION
-	}
 }
 function getVariableSegmentStartIntoD(segment) {
 	let segmentStartPointer
@@ -130,11 +72,14 @@ function getPositionIntoD({positionArguments, className}) {
 		case 'local':
 		case 'this':
 		case 'that': {
-			return getVariableSegmentStartIntoD(segment)
-				.concat([
+			const instructions = getVariableSegmentStartIntoD(segment)
+			if (offset !== '0') {
+				instructions.push(
 					'@' + offset,
 					'D=D+A'
-				])
+				)
+			}
+			return instructions
 		}
 		case 'static': {
 			return [
@@ -229,14 +174,37 @@ class PushInstruction {
 		return this.instructions
 	}
 }
-const SUB_INSTRUCTION = POP_INTO_D
-	.concat(DECREMENT_AND_LOAD_SP)
-	.concat(['D=M-D'])
-	.concat(PUSH_FROM_D)
-class SubInstruction {
-	toHack() {
-		return SUB_INSTRUCTION
-	}
+
+const ARITHMETIC_INSTRUCTIONS = {
+	'add': POP_INTO_D
+		.concat(DECREMENT_AND_LOAD_SP)
+		.concat(['D=M+D'])
+		.concat(PUSH_FROM_D),
+	'and': POP_INTO_D
+		.concat(DECREMENT_AND_LOAD_SP)
+		.concat(['D=M&D'])
+		.concat(PUSH_FROM_D),
+	'neg': DECREMENT_AND_LOAD_SP
+		.concat(['D=-M'])
+		.concat(PUSH_FROM_D),
+	'not': DECREMENT_AND_LOAD_SP
+		.concat(['D=!M'])
+		.concat(PUSH_FROM_D),
+	'or': POP_INTO_D
+		.concat(DECREMENT_AND_LOAD_SP)
+		.concat(['D=M|D'])
+		.concat(PUSH_FROM_D),
+	'sub': SUB_INTO_D
+		.concat(PUSH_FROM_D)
+}
+const COMPARISON_INSTRUCTION_CODES = {
+	'gt': 'GT',
+	'eq': 'EQ',
+	'lt': 'LT'
+}
+const MEMORY_INSTRUCTION_CLASSES = {
+	'pop': PopInstruction,
+	'push': PushInstruction
 }
 
 function getLines(stream, lineCallback, endCallback) {
@@ -276,57 +244,19 @@ getLines(inStream, line => {
 	if (EMPTY_LINE.test(line)) return
 	const commandArguments = line.split(' ')
 	const [command, ...positionArguments] = commandArguments
-	let instruction
-	switch (command) {
-		case 'add': {
-			instruction = new AddInstruction
-			break
-		}
-		case 'and': {
-			instruction = new AndInstruction
-			break
-		}
-		case 'gt': {
-			instruction = new GtInstruction
-			break
-		}
-		case 'eq': {
-			instruction = new EqInstruction
-			break
-		}
-		case 'lt': {
-			instruction = new LtInstruction
-			break
-		}
-		case 'neg': {
-			instruction = new NegInstruction
-			break
-		}
-		case 'not': {
-			instruction = new NotInstruction
-			break
-		}
-		case 'or': {
-			instruction = new OrInstruction
-			break
-		}
-		case 'pop': {
-			instruction = new PopInstruction({positionArguments, className})
-			break
-		}
-		case 'push': {
-			instruction = new PushInstruction({positionArguments, className})
-			break
-		}
-		case 'sub': {
-			instruction = new SubInstruction
-			break
-		}
-		default: {
-			throw new Error('Unrecognized command in "' + line + '"')
+	let instructions
+	const arithmeticInstructions = ARITHMETIC_INSTRUCTIONS[command]
+	if (arithmeticInstructions) instructions = arithmeticInstructions
+	else {
+		const comparisonInstructionCode = COMPARISON_INSTRUCTION_CODES[command]
+		if (comparisonInstructionCode) instructions = comparisonInstructions(comparisonInstructionCode)
+		else {
+			const memoryInstructionClass = MEMORY_INSTRUCTION_CLASSES[command]
+			if (memoryInstructionClass) instructions = new memoryInstructionClass({positionArguments, className}).toHack()
+			else throw new Error('Unrecognized command in "' + line + '"')
 		}
 	}
-	for (const line of instruction.toHack()) {
+	for (const line of instructions) {
 		outStream.write(line)
 		outStream.write('\n')
 	}

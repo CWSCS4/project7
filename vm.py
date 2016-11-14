@@ -1,22 +1,125 @@
 def decrementSP(): #helper function for decrementing pointer
     print "@SP"
-    print "M=M-1"
+    print "AM=M-1"
 
-def pushC(input): #loads SP value and increments it while writing a decoded input to the next SP address
+def decode(inputC,writeTo): #could be made a lot nicer and shorter
+    if inputC[0]=="local":
+        if not writeTo:
+            print "@"+inputC[0]
+            print "D=A"
+            print "@"+inputC[1]
+            print "A=D+A"
+            print "D=M"
+            print "@SP"
+            print "A=M"
+            return "D"
+        
+        print "@"+inputC[0]
+        print "D=A"
+        print "@"+inputC[1]
+        print "D=D+A"
+        print "@SP"
+        print "A=M"
+        
+        return "D"
+    elif inputC[0]=="argument":
+        if not writeTo:
+            print "@"+inputC[0]
+            print "D=A"
+            print "@"+inputC[1]
+            print "A=D+A"
+            print "D=M"
+            print "@SP"
+            print "A=M"
+            return "D"
+        
+        print "@"+inputC[0]
+        print "D=A"
+        print "@"+inputC[1]
+        print "D=D+A"
+        print "@SP"
+        print "A=M"
+        
+        return "D"
+    elif inputC[0]=="this":
+        if not writeTo:
+            print "@"+inputC[0]
+            print "D=A"
+            print "@"+inputC[1]
+            print "A=D+A"
+            print "D=M"
+            print "@SP"
+            print "A=M"
+            return "D"
+        
+        print "@"+inputC[0]
+        print "D=A"
+        print "@"+inputC[1]
+        print "D=D+A"
+        print "@SP"
+        print "A=M"
+        
+        return "D"
+    elif inputC[0]=="that":
+        if not writeTo:
+            print "@"+inputC[0]
+            print "D=A"
+            print "@"+inputC[1]
+            print "A=D+A"
+            print "D=M"
+            print "@SP"
+            print "A=M"
+            return "D"
+        
+        print "@"+inputC[0]
+        print "D=A"
+        print "@"+inputC[1]
+        print "D=D+A"
+        print "@SP"
+        print "A=M"
+        
+        return "D"
+    elif inputC[0]=="pointer":
+        if not writeTo:
+            print "@"+str(3+int(inputC[1]))
+            print "D=M"
+            print "@SP"
+            print "A=M"
+            return "D"
+            
+        return str(3+int(inputC[1]))
+    elif inputC[0]=="temp":
+        if not writeTo:
+            print "@"+str(5+int(inputC[1]))
+            print "D=M"
+            print "@SP"
+            print "A=M"
+            return "D"
+            
+        return str(5+int(inputC[1]))
+    elif inputC[0]=="constant":
+        if not writeTo:
+            print "@"+inputC[1]
+            print "D=M"
+            print "@SP"
+            print "A=M"
+            return "D"
+
+        print "why are you trying to write to a constant"
+def pushC(inputC): #loads SP value and increments it while writing a decoded input to the next SP address
     print "@SP"
-    print "@M"
-    print "M="+decode(input[1:])
+    print "A=M"
+    print "M="+decode(inputC[1:], False)
     print "@SP"
     print "M=M+1"
 
-def popC(input): #decrements from SP and writes previous value to specified address
+def popC(inputC): #decrements from SP and writes previous value to specified address
     decrementSP()
-    print "@M"
     print "D=M"
-    print "@"+decode(input[:1])
+    print "@"+decode(inputC[:1], True)
     print "M=D"
 
-def addC(input): #takes 2 values from the stack and adds them
+def addC(inputC): #takes 2 values from the stack and adds them
     decrementSP()
     print "D=M"
     decrementSP()
@@ -25,7 +128,7 @@ def addC(input): #takes 2 values from the stack and adds them
     print "@M"
     print "M=D"
 
-def subC(input): #same as addC() but with a minus sign
+def subC(inputC): #same as addC() but with a minus sign
     decrementSP()
     print "D=M"
     decrementSP()
@@ -34,13 +137,14 @@ def subC(input): #same as addC() but with a minus sign
     print "@M"
     print "M=D"
 
-def negC(input): #loads SP and negates the value at it
+def negC(inputC): #loads SP and negates the value at it
     print "@SP"
+    print "A=M"
     print "D=M-1"
     print "@D"
     print "M=-M"
 
-def andC(input): #loads 2 values from the stack and writes the & to the stack
+def andC(inputC): #loads 2 values from the stack and writes the & to the stack
     decrementSP()
     print "@M"
     print "D=M"
@@ -48,7 +152,7 @@ def andC(input): #loads 2 values from the stack and writes the & to the stack
     print "@M"
     print "M=D&M"
 
-def orC(input): #loads 2 values from the stack and writes the | to the stack
+def orC(inputC): #loads 2 values from the stack and writes the | to the stack
     decrementSP()
     print "@M"
     print "D=M"
@@ -56,8 +160,9 @@ def orC(input): #loads 2 values from the stack and writes the | to the stack
     print "@M"
     print "M=D|M"
 
-def notC(input): #loads SP and takes the bitwise ! of its current value
+def notC(inputC): #loads SP and takes the bitwise ! of its current value
     print "@SP"
+    print "A=M"
     print "D=M-1"
     print "@D"
     print "M=!M"

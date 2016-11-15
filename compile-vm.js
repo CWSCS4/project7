@@ -4,30 +4,20 @@ const path = require('path')
 
 if (process.argv.length !== 3) throw new Error('Incorrect syntax. Use: ./compile-vm.js FILE[.asm]')
 
-const DECREMENT_AND_LOAD_SP = [
+const POP_INTO_D = [
 	'@SP',
-	'AM=M-1'
-]
-const POP_INTO_D = DECREMENT_AND_LOAD_SP
-	.concat(['D=M'])
-const PUSH_FROM_D = [
-	'@SP',
-	'M=M+1',
-	'A=M-1',
-	'M=D'
+	'AM=M-1',
+	'D=M'
 ]
 const LOAD_STACK_TOP = [
 	'@SP',
 	'A=M-1'
 ]
-const SUB_INTO_D = POP_INTO_D
-	.concat(DECREMENT_AND_LOAD_SP)
-	.concat(['D=M-D'])
 let comparisonLabelID = 0
 function comparisonInstructions(jmpTrue) {
 	const jmpTrueLabel = jmpTrue + '_' + String(comparisonLabelID++) //guarantee no collisions
 	const endLabel = 'END_' + jmpTrueLabel
-	return SUB_INTO_D
+	return twoOperandArithmetic({operator: '-', destination: 'D'})
 		.concat([
 			'@' + jmpTrueLabel,
 			'D;J' + jmpTrue,
@@ -38,7 +28,8 @@ function comparisonInstructions(jmpTrue) {
 			'D=-1',
 			'(' + endLabel + ')'
 		])
-		.concat(PUSH_FROM_D)
+		.concat(LOAD_STACK_TOP)
+		.concat(['M=D'])
 }
 function getVariableSegmentStartIntoD(segment) {
 	let segmentStartPointer
@@ -122,16 +113,17 @@ function getPositionIntoD({positionArguments, className}) {
 		}
 	}
 }
+const POP_TEMP = '@R15'
 class PopInstruction {
 	constructor({positionArguments, className}) {
 		this.instructions = getPositionIntoD({positionArguments, className})
 			.concat([
-				'@R15',
+				POP_TEMP,
 				'M=D'
 			])
 			.concat(POP_INTO_D)
 			.concat([
-				'@R15',
+				POP_TEMP,
 				'A=M',
 				'M=D'
 			])
@@ -172,32 +164,39 @@ function getValueIntoD({positionArguments, className}) {
 class PushInstruction {
 	constructor({positionArguments, className}) {
 		this.instructions = getValueIntoD({positionArguments, className})
-			.concat(PUSH_FROM_D)
+			.concat([
+				'@SP',
+				'M=M+1',
+				'A=M-1',
+				'M=D'
+			])
 	}
 	toHack() {
 		return this.instructions
 	}
 }
+function oneOperandArithmetic(operator) {
+	return LOAD_STACK_TOP
+		.concat(['M=' + operator + 'M'])
+}
+function twoOperandArithmetic({operator, destination}) {
+	return POP_INTO_D
+		.concat([
+			'A=A-1',
+			destination + '=M' + operator + 'D'
+		])
+}
+function twoOperandStackArithmetic(operator) {
+	return twoOperandArithmetic({operator, destination: 'M'})
+}
 
 const ARITHMETIC_INSTRUCTIONS = {
-	'add': POP_INTO_D
-		.concat(DECREMENT_AND_LOAD_SP)
-		.concat(['D=M+D'])
-		.concat(PUSH_FROM_D),
-	'and': POP_INTO_D
-		.concat(DECREMENT_AND_LOAD_SP)
-		.concat(['D=M&D'])
-		.concat(PUSH_FROM_D),
-	'neg': LOAD_STACK_TOP
-		.concat('M=-M'),
-	'not': LOAD_STACK_TOP
-		.concat(['M=!M']),
-	'or': POP_INTO_D
-		.concat(DECREMENT_AND_LOAD_SP)
-		.concat(['D=M|D'])
-		.concat(PUSH_FROM_D),
-	'sub': SUB_INTO_D
-		.concat(PUSH_FROM_D)
+	'add': twoOperandStackArithmetic('+'),
+	'and': twoOperandStackArithmetic('&'),
+	'neg': oneOperandArithmetic('-'),
+	'not': oneOperandArithmetic('!'),
+	'or': twoOperandStackArithmetic('|'),
+	'sub': twoOperandStackArithmetic('-')
 }
 const COMPARISON_INSTRUCTION_CODES = {
 	'gt': 'GT',

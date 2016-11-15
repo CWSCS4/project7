@@ -1,3 +1,7 @@
+#!/usr/bin/env python
+
+import sys
+
 def decrementSP(): #helper function for decrementing pointer
     print "@SP"
     print "AM=M-1"
@@ -13,14 +17,14 @@ def decode(inputC,writeTo): #could be made a lot nicer and shorter
             print "@SP"
             print "A=M"
             return "D"
-        
+
         print "@"+inputC[0]
         print "D=A"
         print "@"+inputC[1]
         print "D=D+A"
         print "@SP"
         print "A=M"
-        
+
         return "D"
     elif inputC[0]=="argument":
         if not writeTo:
@@ -32,14 +36,14 @@ def decode(inputC,writeTo): #could be made a lot nicer and shorter
             print "@SP"
             print "A=M"
             return "D"
-        
+
         print "@"+inputC[0]
         print "D=A"
         print "@"+inputC[1]
         print "D=D+A"
         print "@SP"
         print "A=M"
-        
+
         return "D"
     elif inputC[0]=="this":
         if not writeTo:
@@ -51,14 +55,14 @@ def decode(inputC,writeTo): #could be made a lot nicer and shorter
             print "@SP"
             print "A=M"
             return "D"
-        
+
         print "@"+inputC[0]
         print "D=A"
         print "@"+inputC[1]
         print "D=D+A"
         print "@SP"
         print "A=M"
-        
+
         return "D"
     elif inputC[0]=="that":
         if not writeTo:
@@ -70,14 +74,14 @@ def decode(inputC,writeTo): #could be made a lot nicer and shorter
             print "@SP"
             print "A=M"
             return "D"
-        
+
         print "@"+inputC[0]
         print "D=A"
         print "@"+inputC[1]
         print "D=D+A"
         print "@SP"
         print "A=M"
-        
+
         return "D"
     elif inputC[0]=="pointer":
         if not writeTo:
@@ -86,7 +90,7 @@ def decode(inputC,writeTo): #could be made a lot nicer and shorter
             print "@SP"
             print "A=M"
             return "D"
-            
+
         return str(3+int(inputC[1]))
     elif inputC[0]=="temp":
         if not writeTo:
@@ -95,7 +99,7 @@ def decode(inputC,writeTo): #could be made a lot nicer and shorter
             print "@SP"
             print "A=M"
             return "D"
-            
+
         return str(5+int(inputC[1]))
     elif inputC[0]=="constant":
         if not writeTo:
@@ -109,14 +113,14 @@ def decode(inputC,writeTo): #could be made a lot nicer and shorter
 def pushC(inputC): #loads SP value and increments it while writing a decoded input to the next SP address
     print "@SP"
     print "A=M"
-    print "M="+decode(inputC[1:], False)
+    print "M="+str(decode(inputC[1:], False))
     print "@SP"
     print "M=M+1"
 
 def popC(inputC): #decrements from SP and writes previous value to specified address
     decrementSP()
     print "D=M"
-    print "@"+decode(inputC[:1], True)
+    print "@"+str(decode(inputC[:1], True))
     print "M=D"
 
 def addC(inputC): #takes 2 values from the stack and adds them
@@ -226,7 +230,7 @@ for line in sys.stdin: #loops through standard input
         except:
             pass
         current=line.split(" ")
-        current = filter(lambda x:(x!="",current)
+        current = filter(lambda x:(x!=""),current)
         typeof = current[0] #calls function based on type of command
         if typeof == "push":
             pushC(current)

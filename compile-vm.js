@@ -16,6 +16,10 @@ const PUSH_FROM_D = [
 	'A=M-1',
 	'M=D'
 ]
+const LOAD_STACK_TOP = [
+	'@SP',
+	'A=M-1'
+]
 const SUB_INTO_D = POP_INTO_D
 	.concat(DECREMENT_AND_LOAD_SP)
 	.concat(['D=M-D'])
@@ -184,12 +188,10 @@ const ARITHMETIC_INSTRUCTIONS = {
 		.concat(DECREMENT_AND_LOAD_SP)
 		.concat(['D=M&D'])
 		.concat(PUSH_FROM_D),
-	'neg': DECREMENT_AND_LOAD_SP
-		.concat(['D=-M'])
-		.concat(PUSH_FROM_D),
-	'not': DECREMENT_AND_LOAD_SP
-		.concat(['D=!M'])
-		.concat(PUSH_FROM_D),
+	'neg': LOAD_STACK_TOP
+		.concat('M=-M'),
+	'not': LOAD_STACK_TOP
+		.concat(['M=!M']),
 	'or': POP_INTO_D
 		.concat(DECREMENT_AND_LOAD_SP)
 		.concat(['D=M|D'])

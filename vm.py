@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 #!/usr/bin/python
 
 import sys
@@ -6,84 +7,37 @@ def decrementSP(): #helper function for decrementing pointer
 	print "@SP"
 	print "AM=M-1"
 
+def accessLoc(inputC, writeTo, typeC): #inputC and writeTo are the same as in decode(). typeC is a string that is passed from the if statement blocks
+	if not writeTo: #in decode that signifies the assembler-friendly representation of the address
+		print "@"+typeC
+		print "D=M"
+		print "@"+inputC[1]
+		print "A=D+A"
+		print "D=M"
+		print "@SP"
+		print "A=M"
+		return "D"
+
+	print "@"+typeC
+	print "D=M"
+	print "@"+inputC[1]
+	print "D=D+A"
+	print "@SP"
+	print "A=M"
+
+	return "D"
+
 def decode(inputC,writeTo): #gets the desired address/value from inputC case by case depending on whether writeTo is true/false. writeTo signifies either pop or push
-	if inputC[0]=="local": #LCL, ARG, THIS and THAT are first accessed in memory to get the value that is being stored in the respective register
-		if not writeTo:
-			print "@LCL"
-			print "D=M"
-			print "@"+inputC[1]
-			print "A=D+A"
-			print "D=M"
-			print "@SP"
-			print "A=M"
-			return "D"
-
-		print "@LCL"
-		print "D=M"
-		print "@"+inputC[1]
-		print "D=D+A"
-		print "@SP"
-		print "A=M"
-
-		return "D"
+	if inputC[0]=="local": #LCL, ARG, THIS and THAT are first accessed in memory by passing in relevant arguments to accessLoc() to get the value that is being stored in the respective register
+		return accessLoc(inputC, writeTo, "LCL")
 	elif inputC[0]=="argument":
-		if not writeTo:
-			print "@ARG"
-			print "D=M"
-			print "@"+inputC[1]
-			print "A=D+A"
-			print "D=M"
-			print "@SP"
-			print "A=M"
-			return "D"
-
-		print "@ARG"
-		print "D=M"
-		print "@"+inputC[1]
-		print "D=D+A"
-		print "@SP"
-		print "A=M"
-
-		return "D"
+		return accessLoc(inputC, writeTo, "ARG")
 	elif inputC[0]=="this":
-		if not writeTo:
-			print "@THIS"
-			print "D=M"
-			print "@"+inputC[1]
-			print "A=D+A"
-			print "D=M"
-			print "@SP"
-			print "A=M"
-			return "D"
-
-		print "@THIS"
-		print "D=M"
-		print "@"+inputC[1]
-		print "D=D+A"
-		print "@SP"
-		print "A=M"
-
-		return "D"
+		return accessLoc(inputC, writeTo, "THIS")
 	elif inputC[0]=="that":
-		if not writeTo:
-			print "@THAT"
-			print "D=M"
-			print "@"+inputC[1]
-			print "A=D+A"
-			print "D=M"
-			print "@SP"
-			print "A=M"
-			return "D"
+		return accessLoc(inputC, writeTo, "THAT")
 
-		print "@THAT"
-		print "D=M"
-		print "@"+inputC[1]
-		print "D=D+A"
-		print "@SP"
-		print "A=M"
-
-		return "D"
-	elif inputC[0]=="temp":
+	elif inputC[0]=="temp": #temp, pointer and constant are handled on their own. The first two simply add 5 or 3 (temp and pointer respectively) to the second element of inputC
 		if not writeTo:
 			print "@"+str(5+int(inputC[1]))
 			print "D=M"
@@ -101,16 +55,7 @@ def decode(inputC,writeTo): #gets the desired address/value from inputC case by 
 			return "D"
 
 		return str(3+int(inputC[1]))
-	elif inputC[0]=="temp":
-		if not writeTo:
-			print "@"+str(5+int(inputC[1]))
-			print "D=M"
-			print "@SP"
-			print "A=M"
-			return "D"
-
-		return str(5+int(inputC[1]))
-	elif inputC[0]=="constant":
+	elif inputC[0]=="constant": #constant is handled by simply loading it into the A register and then into the D register. No support for writing to a constant is offered.
 		if not writeTo:
 			print "@"+inputC[1]
 			print "D=A"
@@ -120,9 +65,10 @@ def decode(inputC,writeTo): #gets the desired address/value from inputC case by 
 
 		print "why are you trying to write to a constant"
 
-	elif inputC[0]=="static":
+	elif inputC[0]=="static": #static variables are allocated their own space using path from command line arguments.
+		tempname = path.split("/")[-1].split(".")[0]
+		tempname += "."
 		if not writeTo:
-			tempname = path.split("/")[-1].split(".")[0]
 			print "@"+tempname+inputC[1]
 			print "D=M"
 			return "D"
@@ -163,37 +109,37 @@ def negC(inputC): #loads SP and negates the value at it
 	print "A=D"
 	print "M=-M"
 
-def arithC(inputC,type):
+def arithC(inputC,typeC): #general arithmatic handler, typeC is a string that holds the assembler-friendly representation of the desired address
 	decrementSP()
 	print "D=M"
 	decrementSP()
-	print "D=M"+type+"D"
+	print "D=M"+typeC+"D"
 	print "@SP"
 	print "A=M"
 	print "M=D"
 	print "@SP"
 	print "M=M+1"
 
-def notC(inputC): #loads SP and takes the bitwise ! of its current value
+def notC(inputC): #loads SP and takes the bitwise ! of its current value. I suppose I could have combined this with negC(), but since each is so short I decided to leave them be.
 	print "@SP"
 	print "D=M-1"
 	print "A=D"
 	print "M=!M"
 
-def compC(input, type): #loads 2 values and uses jump logic to set an appropiate value. If the values are not equal, the value is set to 0 and the program is
+def compC(input, typeC): #general comparative helper function. typeC is passed in through the main lood and represents an assembler-friendly versin of the desired comparison
 	global jumpct
-	decrementSP() #unconditionally jumped to the end. If the values are equal, the program jumps to label (EQ) and runs to the end.
+	decrementSP()
 	print "D=M"
 	decrementSP()
 	print "D=M-D"
-	print "@"+type+str(jumpct)
-	print "D;"+type
+	print "@"+typeC+str(jumpct)
+	print "D;"+typeC
 	print "@SP"
 	print "A=M"
 	print "M=0"
 	print "@END"+str(jumpct)
 	print "0;JMP"
-	print "("+type+str(jumpct)+")"
+	print "("+typeC+str(jumpct)+")"
 	print "@SP"
 	print "A=M"
 	print "M=-1"
